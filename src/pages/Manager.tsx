@@ -99,17 +99,7 @@ const Manager = () => {
     const totalRevenue = filtered.reduce((s, c) => s + (c.total_amount || 0), 0);
     const totalPaid = filtered.reduce((s, c) => s + (c.tranche_paid || 0), 0);
 
-    const byDoctor = new Map<string, { count: number; revenue: number; paid: number }>();
-    filtered.forEach(c => {
-      const name = c.doctor?.name || 'Inconnu';
-      const existing = byDoctor.get(name) || { count: 0, revenue: 0, paid: 0 };
-      existing.count++;
-      existing.revenue += c.total_amount || 0;
-      existing.paid += c.tranche_paid || 0;
-      byDoctor.set(name, existing);
-    });
-
-    return { totalClients, totalRevenue, totalPaid, byDoctor };
+    return { totalClients, totalRevenue, totalPaid };
   }, [filtered]);
 
   const exportExcel = () => {
@@ -169,24 +159,15 @@ const Manager = () => {
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Rechercher..."
+              placeholder="Rechercher par nom, téléphone, traitement..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 h-9 sm:h-10"
             />
           </div>
           <div className="flex gap-2">
-            <Select value={doctorFilter} onValueChange={setDoctorFilter}>
-              <SelectTrigger className="flex-1 sm:w-[150px] h-9 sm:h-10 text-sm"><SelectValue placeholder="Médecin" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous médecins</SelectItem>
-                {doctors.map(d => (
-                  <SelectItem key={d.id} value={d.name}>Dr. {d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Select value={treatmentFilter} onValueChange={setTreatmentFilter}>
-              <SelectTrigger className="flex-1 sm:w-[150px] h-9 sm:h-10 text-sm"><SelectValue placeholder="Traitement" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[200px] h-9 sm:h-10 text-sm"><SelectValue placeholder="Traitement" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tous traitements</SelectItem>
                 {treatments.map(t => (
@@ -198,73 +179,43 @@ const Manager = () => {
         </div>
 
         {/* Analytics Cards */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Card className="border-0 shadow-sm">
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
-                <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
-                <span className="text-xs text-muted-foreground">Patients</span>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Patients</span>
+                <p className="text-3xl font-black text-primary">{analytics.totalClients}</p>
               </div>
-              <p className="text-xl sm:text-2xl font-bold text-foreground">{analytics.totalClients}</p>
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <Users className="h-6 w-6 text-primary" />
+              </div>
             </CardContent>
           </Card>
           <Card className="border-0 shadow-sm">
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
-                <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
-                <span className="text-xs text-muted-foreground">Revenus</span>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Revenus</span>
+                <p className="text-3xl font-black text-foreground">{analytics.totalRevenue.toLocaleString()} <small className="text-sm font-normal text-muted-foreground">DZD</small></p>
               </div>
-              <p className="text-lg sm:text-2xl font-bold text-foreground">{analytics.totalRevenue.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">DZD</p>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                <DollarSign className="h-6 w-6 text-emerald-500" />
+              </div>
             </CardContent>
           </Card>
           <Card className="border-0 shadow-sm">
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
-                <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
-                <span className="text-xs text-muted-foreground">Payé</span>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Payé</span>
+                <p className="text-3xl font-black text-foreground">{analytics.totalPaid.toLocaleString()} <small className="text-sm font-normal text-muted-foreground">DZD</small></p>
               </div>
-              <p className="text-lg sm:text-2xl font-bold text-foreground">{analytics.totalPaid.toLocaleString()}</p>
-              <p className="text-xs text-muted-foreground">DZD</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
-                <Stethoscope className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
-                <span className="text-xs text-muted-foreground">Médecins</span>
+              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+                <DollarSign className="h-6 w-6 text-blue-500" />
               </div>
-              <p className="text-xl sm:text-2xl font-bold text-foreground">{analytics.byDoctor.size}</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Per Doctor Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-          {Array.from(analytics.byDoctor.entries()).map(([name, stats]) => (
-            <Card key={name} className="border-0 shadow-sm">
-              <CardContent className="p-3 sm:p-4">
-                <p className="font-medium text-foreground mb-2 text-sm sm:text-base">Dr. {name}</p>
-                <div className="grid grid-cols-3 gap-2 text-sm">
-                  <div>
-                    <p className="text-muted-foreground text-xs">Patients</p>
-                    <p className="font-semibold text-foreground">{stats.count}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Revenus</p>
-                    <p className="font-semibold text-foreground text-xs sm:text-sm">{stats.revenue.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">Payé</p>
-                    <p className="font-semibold text-foreground text-xs sm:text-sm">{stats.paid.toLocaleString()}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Data Table - card view on mobile, table on desktop */}
+        {/* Data Table */}
         <div className="sm:hidden space-y-2">
           {loading ? (
             <p className="text-center py-8 text-muted-foreground">Chargement...</p>
@@ -273,20 +224,20 @@ const Manager = () => {
           ) : (
             filtered.map(c => (
               <Card key={c.id} className="border-0 shadow-sm">
-                <CardContent className="p-3 space-y-1.5">
-                  <div className="flex justify-between items-start gap-2">
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex justify-between items-start">
                     <div className="min-w-0">
-                      <p className="font-medium text-foreground text-sm truncate">{c.client_name}</p>
-                      <a href={`tel:${c.phone}`} className="text-xs text-primary">{c.phone}</a>
+                      <p className="font-bold text-foreground truncate">{c.client_name}</p>
+                      <a href={`tel:${c.phone}`} className="text-sm text-primary font-medium">{c.phone}</a>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-semibold text-sm text-foreground">{c.total_amount?.toLocaleString()} DZD</p>
-                      <p className="text-xs text-muted-foreground">Payé: {c.tranche_paid?.toLocaleString()}</p>
+                    <div className="text-right">
+                      <p className="font-black text-primary">{c.total_amount?.toLocaleString()} DZD</p>
+                      <p className="text-xs font-bold text-emerald-600">Payé: {c.tranche_paid?.toLocaleString()}</p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Dr. {c.doctor?.name || '—'} · {c.treatment}</span>
-                    <span>{format(new Date(c.completed_at), 'dd/MM HH:mm')}</span>
+                  <div className="flex items-center justify-between pt-2 border-t border-border text-xs text-muted-foreground">
+                    <span className="font-bold uppercase tracking-wider">{c.treatment}</span>
+                    <span>{format(new Date(c.completed_at), 'dd/MM/yy HH:mm')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -298,39 +249,52 @@ const Manager = () => {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Nom</TableHead>
-                  <TableHead>Tél.</TableHead>
-                  <TableHead>Médecin</TableHead>
-                  <TableHead>Traitement</TableHead>
-                  <TableHead className="text-right">Montant</TableHead>
-                  <TableHead className="text-right">Payé</TableHead>
-                  <TableHead>Réception</TableHead>
-                  <TableHead>Date</TableHead>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="font-bold">Patient</TableHead>
+                  <TableHead className="font-bold text-center">Traitement</TableHead>
+                  <TableHead className="text-right font-bold">Total</TableHead>
+                  <TableHead className="text-right font-bold">Payé</TableHead>
+                  <TableHead className="font-bold text-center">Réception</TableHead>
+                  <TableHead className="text-right font-bold">Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Chargement...</TableCell>
+                    <TableCell colSpan={6} className="text-center py-12">
+                      <p className="text-muted-foreground animate-pulse">Chargement des données...</p>
+                    </TableCell>
                   </TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Aucune donnée</TableCell>
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      Aucune donnée trouvée pour cette période.
+                    </TableCell>
                   </TableRow>
                 ) : (
                   filtered.map(c => (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.client_name}</TableCell>
+                    <TableRow key={c.id} className="hover:bg-muted/30 transition-colors">
                       <TableCell>
-                        <a href={`tel:${c.phone}`} className="text-primary">{c.phone}</a>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-foreground">{c.client_name}</span>
+                          <a href={`tel:${c.phone}`} className="text-xs text-primary font-medium">{c.phone}</a>
+                        </div>
                       </TableCell>
-                      <TableCell>Dr. {c.doctor?.name || '—'}</TableCell>
-                      <TableCell>{c.treatment}</TableCell>
-                      <TableCell className="text-right">{c.total_amount?.toLocaleString()} DZD</TableCell>
-                      <TableCell className="text-right">{c.tranche_paid?.toLocaleString()} DZD</TableCell>
-                      <TableCell className="text-xs">{c.receptionist_email}</TableCell>
-                      <TableCell className="text-xs">
+                      <TableCell className="text-center">
+                        <span className="bg-secondary/50 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                          {c.treatment}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-black text-primary">
+                        {c.total_amount?.toLocaleString()} DZD
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-emerald-600">
+                        {c.tranche_paid?.toLocaleString()} DZD
+                      </TableCell>
+                      <TableCell className="text-center text-xs font-medium text-muted-foreground">
+                        {c.receptionist_email}
+                      </TableCell>
+                      <TableCell className="text-right text-xs font-bold text-muted-foreground">
                         {format(new Date(c.completed_at), 'dd/MM/yyyy HH:mm', { locale: fr })}
                       </TableCell>
                     </TableRow>

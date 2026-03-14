@@ -215,13 +215,16 @@ const Rendezvous = () => {
             return;
         }
 
-        const appointmentAt = new Date(newApptDate);
-        appointmentAt.setHours(h, m, 0, 0);
+        const soloDoctorId = doctors[0]?.id;
+        if (!soloDoctorId) {
+            toast.error('Aucun médecin configuré');
+            return;
+        }
 
         const appointmentData = {
             client_phone: selectedClient.phone,
             client_name: selectedClient.name,
-            doctor_id: newApptDoctor,
+            doctor_id: soloDoctorId,
             appointment_at: appointmentAt.toISOString(),
             notes: newApptNotes,
             status: 'scheduled' as Appointment['status']
@@ -540,8 +543,8 @@ const Rendezvous = () => {
                                 <CardContent className="p-0">
                                     <div className="p-6 border-b bg-muted/20 flex flex-col sm:flex-row items-center justify-between gap-4">
                                         <div>
-                                            <h3 className="font-black italic text-xl text-primary">Vue Docteurs</h3>
-                                            <p className="text-xs text-muted-foreground">Gestion d'agenda globale</p>
+                                            <h3 className="font-black italic text-xl text-primary">Agenda du Cabinet</h3>
+                                            <p className="text-xs text-muted-foreground">Planning quotidien</p>
                                         </div>
                                         <div className="flex gap-2">
                                             <Button variant="outline" className="h-9 px-3 text-xs" onClick={() => setNewApptDate(new Date())}>Aujourd'hui</Button>
@@ -551,18 +554,6 @@ const Rendezvous = () => {
                                             }}>
                                                 <Plus className="h-4 w-4" /> Nouveau RDV
                                             </Button>
-                                        </div>
-                                        <div className="px-6 pb-4 sm:hidden">
-                                            <Select value={selectedDoctorMobile} onValueChange={setSelectedDoctorMobile}>
-                                                <SelectTrigger className="w-full h-11 rounded-xl">
-                                                    <SelectValue placeholder="Choisir un médecin" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {doctors.map(d => (
-                                                        <SelectItem key={d.id} value={d.id}>Dr. {d.name}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
                                         </div>
                                     </div>
 
@@ -576,43 +567,36 @@ const Rendezvous = () => {
                                                     ))}
                                                 </div>
 
-                                                {/* Grid Columns for Doctors */}
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:min-w-[600px]">
-                                                    {doctors
-                                                        .filter(d => selectedDoctorMobile === 'all' || d.id === selectedDoctorMobile)
-                                                        .map(doctor => (
-                                                            <div key={doctor.id} className="relative bg-muted/10 rounded-xl min-h-[1000px] border border-muted-foreground/10">
-                                                                <div className="sticky top-0 z-10 bg-background/90 backdrop-blur-sm p-3 border-b text-center font-bold text-sm text-primary">
-                                                                    {doctor.name}
+                                                <div className="relative bg-muted/10 rounded-xl min-h-[1000px] border border-muted-foreground/10">
+                                                    <div className="sticky top-0 z-10 bg-background/90 backdrop-blur-sm p-3 border-b text-center font-bold text-sm text-primary">
+                                                        Planning
+                                                    </div>
+
+                                                    {parsedAppointments
+                                                        .filter(a => a.status !== 'denied' && a.startOfDayTime === startOfDay(newApptDate || new Date()).getTime())
+                                                        .map(appt => {
+                                                            const date = parseISO(appt.appointment_at);
+                                                            const hours = date.getHours();
+                                                            const minutes = date.getMinutes();
+                                                            const offset = (hours - 8) * 80 + (minutes / 60) * 80 + 50;
+
+                                                            return (
+                                                                <div
+                                                                    key={appt.id}
+                                                                    className={`absolute left-1 right-1 bg-white dark:bg-slate-900 border-l-4 shadow-lg p-2 rounded-lg cursor-pointer hover:scale-[1.02] transition-transform z-20 group ${appt.status === 'coming' ? 'border-l-emerald-500 ring-1 ring-emerald-100' :
+                                                                        appt.status === 'denied' ? 'border-l-rose-500 ring-1 ring-rose-100' :
+                                                                            'border-l-primary'
+                                                                        }`}
+                                                                    style={{ top: `${offset}px`, height: '70px' }}
+                                                                    onClick={() => openEditModal(appt)}
+                                                                >
+                                                                    <p className={`text-[10px] font-black ${appt.status === 'coming' ? 'text-emerald-600' : appt.status === 'denied' ? 'text-rose-600' : 'text-primary'}`}>{format(date, 'HH:mm')}</p>
+                                                                    <p className="text-[11px] font-bold text-foreground leading-tight truncate">{appt.client_name}</p>
+                                                                    <p className={`text-[9px] truncate uppercase font-bold ${appt.status === 'coming' ? 'text-emerald-600' : appt.status === 'denied' ? 'text-rose-600' : 'text-muted-foreground'}`}>{appt.status}</p>
                                                                 </div>
-
-                                                                {/* Appointments for this doctor on selected current day (for simplicity current today view) */}
-                                                                {parsedAppointments
-                                                                    .filter(a => a.status !== 'denied' && a.doctor_id === doctor.id && a.startOfDayTime === startOfDay(newApptDate || new Date()).getTime())
-                                                                    .map(appt => {
-                                                                        const date = parseISO(appt.appointment_at);
-                                                                        const hours = date.getHours();
-                                                                        const minutes = date.getMinutes();
-                                                                        const offset = (hours - 8) * 80 + (minutes / 60) * 80 + 50; // Simple positioning logic
-
-                                                                        return (
-                                                                            <div
-                                                                                key={appt.id}
-                                                                                className={`absolute left-1 right-1 bg-white dark:bg-slate-900 border-l-4 shadow-lg p-2 rounded-lg cursor-pointer hover:scale-[1.02] transition-transform z-20 group ${appt.status === 'coming' ? 'border-l-emerald-500 ring-1 ring-emerald-100' :
-                                                                                    appt.status === 'denied' ? 'border-l-rose-500 ring-1 ring-rose-100' :
-                                                                                        'border-l-primary'
-                                                                                    }`}
-                                                                                style={{ top: `${offset}px`, height: '70px' }}
-                                                                            >
-                                                                                <p className={`text-[10px] font-black ${appt.status === 'coming' ? 'text-emerald-600' : appt.status === 'denied' ? 'text-rose-600' : 'text-primary'}`}>{format(date, 'HH:mm')}</p>
-                                                                                <p className="text-[11px] font-bold text-foreground leading-tight truncate">{appt.client_name}</p>
-                                                                                <p className={`text-[9px] truncate uppercase font-bold ${appt.status === 'coming' ? 'text-emerald-600' : appt.status === 'denied' ? 'text-rose-600' : 'text-muted-foreground'}`}>{appt.status}</p>
-                                                                            </div>
-                                                                        );
-                                                                    })
-                                                                }
-                                                            </div>
-                                                        ))}
+                                                            );
+                                                        })
+                                                    }
                                                 </div>
                                             </div>
                                         </ScrollArea>
@@ -723,18 +707,6 @@ const Rendezvous = () => {
                                 <label className="text-xs font-black uppercase text-muted-foreground">Heure</label>
                                 <Input type="time" min="08:00" max="18:00" value={newApptTime} onChange={(e) => setNewApptTime(e.target.value)} className="h-11 rounded-xl" />
                             </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="text-xs font-black uppercase text-muted-foreground">Médecin</label>
-                            <Select value={newApptDoctor} onValueChange={setNewApptDoctor}>
-                                <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Choisir un médecin" /></SelectTrigger>
-                                <SelectContent>
-                                    {doctors.map(d => (
-                                        <SelectItem key={d.id} value={d.id}>Dr. {d.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
                         </div>
 
                         <div className="space-y-2">

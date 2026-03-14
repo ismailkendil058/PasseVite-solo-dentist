@@ -29,10 +29,10 @@ const LiveClock = () => {
 
   return (
     <div className="text-right">
-      <p className="text-xl md:text-2xl font-bold text-foreground tabular-nums">
+      <p className="text-xl md:text-3xl font-black text-foreground tabular-nums tracking-tighter">
         {time.toLocaleTimeString('fr-DZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       </p>
-      <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5 capitalize">
+      <p className="text-[10px] md:text-xs text-muted-foreground mt-0.5 capitalize font-bold tracking-widest opacity-60">
         {time.toLocaleDateString('fr-DZ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
       </p>
     </div>
@@ -42,11 +42,9 @@ const LiveClock = () => {
 const TV = () => {
   const [doctorQueues, setDoctorQueues] = useState<DoctorQueueInfo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [animate, setAnimate] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const announcementTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevWaitingIds = useRef<Set<string>>(new Set());
-  // Map entryId -> { clientId, patientName, doctorName } for entries we've seen while waiting
   const waitingMeta = useRef<Map<string, { clientId: string; patientName?: string; doctorName: string }>>(new Map());
 
   const speakAnnouncement = useCallback((clientId: string, patientName: string | undefined, doctorName: string) => {
@@ -66,13 +64,11 @@ const TV = () => {
     utter.pitch = 1.05;
     utter.volume = 1;
 
-    // Pick a French voice if available
     const voices = window.speechSynthesis.getVoices();
     const frVoice = voices.find(v => v.lang.startsWith('fr') && v.localService) ||
       voices.find(v => v.lang.startsWith('fr'));
     if (frVoice) utter.voice = frVoice;
 
-    // Repeat twice with a pause
     utter.onend = () => {
       setTimeout(() => {
         const utter2 = new SpeechSynthesisUtterance(text);
@@ -98,7 +94,6 @@ const TV = () => {
   }, [speakAnnouncement]);
 
   const fetchQueue = useCallback(async () => {
-    // Optimization: Parallel fetch doctors and active session
     const [docsRes, sessionRes] = await Promise.all([
       supabase.from('doctors').select('id, name, initial').order('name', { ascending: true }),
       supabase.from('sessions').select('id').eq('is_active', true).maybeSingle()
@@ -121,7 +116,6 @@ const TV = () => {
       return;
     }
 
-    // Fetch both waiting and in-cabinet entries to distinguish deletions from calls
     const { data: allSessionEntries } = await supabase
       .from('queue_entries')
       .select('id, status, client_id, patient_name, doctor_id, state, state_number, doctor:doctors(name, initial)')
@@ -129,14 +123,10 @@ const TV = () => {
 
     const waitingEntries = (allSessionEntries || []).filter(e => e.status === 'waiting');
     const inCabinetIds = new Set((allSessionEntries || []).filter(e => e.status === 'in_cabinet').map(e => e.id));
-
     const currentWaitingIds = new Set(waitingEntries.map(e => e.id));
 
-    // Detect entries that disappeared from waiting
     prevWaitingIds.current.forEach(id => {
       if (!currentWaitingIds.has(id)) {
-        // ONLY announce if it moved to cabinet. 
-        // If it was deleted from the table, it won't be in inCabinetIds.
         if (inCabinetIds.has(id)) {
           const meta = waitingMeta.current.get(id);
           if (meta) {
@@ -147,7 +137,6 @@ const TV = () => {
       }
     });
 
-    // Update meta map with current waiting entries
     waitingEntries.forEach(e => {
       if (!waitingMeta.current.has(e.id)) {
         waitingMeta.current.set(e.id, {
@@ -165,16 +154,14 @@ const TV = () => {
         e => e.doctor_id === doctor.id
       );
       const sorted = [...doctorEntries].sort((a, b) => {
-        // 1. U (Urgent) always has absolute priority
         if (a.state === 'U' && b.state !== 'U') return -1;
         if (a.state !== 'U' && b.state === 'U') return 1;
         if (a.state === 'U' && b.state === 'U') return a.state_number - b.state_number;
 
-        // 2. For N (New) and R (Appointment), alternate: N1, R1, N2, R2, ...
         const getRank = (e: any) => {
           const num = e.state_number || 0;
-          if (e.state === 'N') return num * 2 - 1; // N1->1, N2->3, N3->5
-          if (e.state === 'R') return num * 2;     // R1->2, R2->4, R3->6
+          if (e.state === 'N') return num * 2 - 1;
+          if (e.state === 'R') return num * 2;
           return 999;
         };
 
@@ -197,7 +184,6 @@ const TV = () => {
   }, [showAnnouncement]);
 
   useEffect(() => {
-    // Preload voices (browsers are lazy about this)
     if (window.speechSynthesis) {
       window.speechSynthesis.getVoices();
       window.speechSynthesis.addEventListener('voiceschanged', () => {
@@ -222,25 +208,17 @@ const TV = () => {
 
   if (loading) {
     return (
-      <div className="h-[100dvh] transition-all duration-300 flex flex-col items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-6 animate-in fade-in zoom-in duration-500">
-          <div className="relative">
-            <div className="w-20 h-20 rounded-full border-4 border-primary/10 border-t-primary animate-spin" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-10 h-10 rounded-full bg-primary/5 animate-pulse" />
-            </div>
-          </div>
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-black italic text-primary tracking-tighter">PasseVite</h1>
-            <p className="text-[10px] tracking-[0.4em] text-muted-foreground uppercase font-medium">Initialisation du système</p>
-          </div>
+      <div className="h-[100dvh] flex flex-col items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-6">
+          <div className="w-20 h-20 rounded-full border-4 border-primary/10 border-t-primary animate-spin" />
+          <h1 className="text-3xl font-black italic text-primary">PasseVite</h1>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-[100dvh] overflow-hidden bg-background flex flex-col p-3 md:p-5" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="h-[100dvh] overflow-hidden bg-background flex flex-col p-6 lg:p-10 relative" style={{ fontFamily: "'Inter', sans-serif" }}>
 
       {/* ── Full-screen Announcement Overlay ── */}
       {announcement && (
@@ -251,155 +229,143 @@ const TV = () => {
             animation: 'tvFadeIn 0.4s ease',
           }}
         >
-          {/* Pulsing ring */}
           <div
             className="absolute w-[min(60vw,60vh)] h-[min(60vw,60vh)] rounded-full opacity-20"
             style={{ background: 'white', animation: 'tvPulse 2s ease-in-out infinite' }}
           />
 
-          <p
-            className="text-lg md:text-2xl font-light tracking-[0.35em] uppercase opacity-80 mb-6"
-            style={{ animation: 'tvSlideUp 0.5s ease 0.1s both' }}
-          >
-            Prochain patient
-          </p>
+          <p className="text-lg md:text-2xl font-light tracking-[0.35em] uppercase opacity-80 mb-6">Prochain patient</p>
 
-          <div
-            className="text-[20vw] md:text-[18vw] font-black leading-none tracking-tight"
-            style={{
-              animation: 'tvSlideUp 0.5s ease 0.2s both',
-              textShadow: '0 4px 40px rgba(0,0,0,0.25)',
-            }}
-          >
+          <div className="text-[20vw] md:text-[18vw] font-black leading-none tracking-tight text-shadow-2xl">
             {announcement.clientId}
           </div>
 
           {announcement.patientName && (
-            <div
-              className="text-4xl md:text-6xl font-bold mt-4 md:mt-6 text-center px-4"
-              style={{ animation: 'tvSlideUp 0.5s ease 0.25s both' }}
-            >
+            <div className="text-4xl md:text-6xl font-bold mt-4 md:mt-6 text-center px-4">
               {announcement.patientName}
             </div>
           )}
 
-          <div
-            className="mt-8 md:mt-12 text-center"
-            style={{ animation: 'tvSlideUp 0.5s ease 0.35s both' }}
-          >
-            <p className="text-base md:text-xl font-light opacity-75 tracking-widest uppercase mb-1">
-              Veuillez vous présenter au cabinet de
-            </p>
-            <p className="text-3xl md:text-5xl font-bold tracking-tight">
-              Dr. {announcement.doctorName}
-            </p>
+          <div className="mt-8 md:mt-12 text-center">
+            <p className="text-base md:text-xl font-light opacity-75 tracking-widest uppercase mb-1">Veuillez vous présenter au cabinet de</p>
+            <p className="text-3xl md:text-5xl font-bold tracking-tight">Dr. {announcement.doctorName}</p>
           </div>
 
-          {/* Progress bar */}
-          <div
-            className="absolute bottom-0 left-0 h-1 bg-white/40 rounded-full"
-            style={{ width: '100%' }}
-          >
-            <div
-              className="h-full bg-white rounded-full"
-              style={{ animation: 'tvProgress 10s linear forwards' }}
-            />
+          <div className="absolute bottom-0 left-0 h-1 bg-white/40 w-full">
+            <div className="h-full bg-white animate-[tvProgress_10s_linear_forwards]" />
           </div>
         </div>
       )}
 
-      {/* CSS keyframes injected inline */}
+      {/* CSS keyframes */}
       <style>{`
-        @keyframes tvFadeIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
-        }
-        @keyframes tvSlideUp {
-          from { opacity: 0; transform: translateY(24px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes tvPulse {
-          0%, 100% { transform: scale(1);   opacity: 0.15; }
-          50%       { transform: scale(1.12); opacity: 0.28; }
-        }
-        @keyframes tvProgress {
-          from { width: 100%; }
-          to   { width: 0%; }
-        }
+        @keyframes tvFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes tvPulse { 0%, 100% { transform: scale(1); opacity: 0.15; } 50% { transform: scale(1.1); opacity: 0.25; } }
+        @keyframes tvProgress { from { width: 100%; } to { width: 0%; } }
+        @keyframes marquee { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
       `}</style>
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-3 md:mb-4 shrink-0">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-primary tracking-tight italic">PasseVite</h1>
-          <p className="text-[8px] md:text-[10px] tracking-[0.4em] text-muted-foreground mt-0.5 uppercase">le soin qui passe</p>
+      <div className="flex items-center justify-between mb-8 lg:mb-12 shrink-0 px-4">
+        <div className="flex items-center gap-6">
+          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-2xl shadow-primary/20 transform -rotate-3 transition-transform hover:rotate-0">
+            <span className="text-primary-foreground font-black text-3xl italic">P</span>
+          </div>
+          <div>
+            <h1 className="text-4xl font-black text-foreground tracking-tighter italic flex items-center gap-3">
+              PasseVite <span className="h-6 w-[1px] bg-border mx-2" /> <span className="text-2xl not-italic font-medium text-muted-foreground tracking-normal">{doctorQueues[0]?.doctor.name}</span>
+            </h1>
+            <p className="text-[10px] tracking-[0.5em] text-muted-foreground uppercase font-black opacity-60">Espace Médical Numérique</p>
+          </div>
         </div>
         <LiveClock />
       </div>
 
-      {/* Doctor Cards Grid */}
-      <div
-        className="flex-1 min-h-0 grid gap-2 md:gap-3"
-        style={{
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gridTemplateRows: 'repeat(2, 1fr)',
-        }}
-      >
+      {/* Main Content Area */}
+      <div className="flex-1 min-h-0">
         {doctorQueues.length === 0 ? (
-          <div className="col-span-2 row-span-2 flex flex-col items-center justify-center text-center">
-            <p className="text-4xl mb-3">🩺</p>
-            <p className="text-lg text-muted-foreground">Aucune session active</p>
+          <div className="h-full flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-1000">
+            <div className="w-32 h-32 rounded-full bg-secondary/30 flex items-center justify-center mb-8 border border-border">
+              <span className="text-7xl">🩺</span>
+            </div>
+            <h2 className="text-4xl font-black text-foreground tracking-tight">Séance fermée</h2>
+            <p className="text-muted-foreground mt-4 text-xl max-w-md mx-auto">Le système d'attente est actuellement inactif. Veuillez vous adresser à l'accueil.</p>
           </div>
         ) : (
-          doctorQueues.map(({ doctor, nextPatient, nextPatientName, waitingCount }) => {
-            const isAnimating = animate === doctor.id;
-            return (
-              <div
-                key={doctor.id}
-                className={`bg-card rounded-xl shadow-sm border border-border flex flex-col overflow-hidden transition-all duration-500 min-h-0 ${isAnimating ? 'ring-2 ring-primary scale-[1.01]' : ''}`}
-              >
-                {/* Doctor Header */}
-                <div className="bg-primary/10 px-3 py-2 flex items-center gap-2 border-b border-border shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm shrink-0">
-                    {doctor.initial || doctor.name.charAt(0)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-muted-foreground leading-none mb-0.5">Docteur</p>
-                    <p className="font-semibold text-foreground truncate text-sm">{doctor.name}</p>
+          <div className="h-full grid grid-cols-1 lg:grid-cols-12 gap-10">
+
+            {/* Left Column: Now Serving */}
+            <div className="lg:col-span-7 flex flex-col shrink-0 min-h-0">
+              <div className="flex-1 bg-card/40 backdrop-blur-3xl rounded-[4rem] border border-white/10 shadow-2xl flex flex-col overflow-hidden relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-60" />
+
+                <div className="p-10 pb-0 z-10">
+                  <div className="inline-flex items-center gap-3 bg-primary/10 px-6 py-2.5 rounded-full border border-primary/20">
+                    <div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
+                    <span className="text-xs font-black uppercase tracking-[0.2em] text-primary">Patient à l'appel</span>
                   </div>
                 </div>
 
-                {/* Next Patient */}
-                <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-3 text-center">
-                  <p className="text-[10px] md:text-xs text-muted-foreground tracking-widest uppercase mb-2">
-                    Prochain patient
-                  </p>
-                  <div
-                    className={`flex flex-col items-center justify-center transition-all duration-700 ${isAnimating ? 'opacity-0 translate-y-3' : 'opacity-100 translate-y-0'
-                      }`}
-                  >
-                    <div className="text-4xl md:text-7xl font-bold text-primary leading-none">
-                      {nextPatient}
+                <div className="flex-1 flex flex-col items-center justify-center p-10 text-center z-10">
+                  <div className="text-[20vw] lg:text-[18vw] font-black text-primary leading-none tracking-tighter drop-shadow-2xl">
+                    {doctorQueues[0].nextPatient}
+                  </div>
+                  {doctorQueues[0].nextPatientName && (
+                    <div className="mt-6 px-12 py-5 bg-secondary/60 backdrop-blur-xl rounded-[2.5rem] border border-white/10 shadow-2xl">
+                      <p className="text-5xl lg:text-6xl font-black text-foreground tracking-tight truncate max-w-[600px]">
+                        {doctorQueues[0].nextPatientName}
+                      </p>
                     </div>
-                    {nextPatientName && (
-                      <div className="text-xs md:text-sm font-medium text-muted-foreground mt-1 truncate max-w-full px-2">
-                        {nextPatientName}
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
 
-                {/* Waiting Count Footer */}
-                <div className="border-t border-border px-3 py-2 flex items-center justify-between shrink-0">
-                  <p className="text-xs text-muted-foreground">En attente</p>
-                  <span className={`text-base font-bold tabular-nums ${waitingCount > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
-                    {waitingCount}
-                  </span>
+                <div className="p-10 bg-gradient-to-t from-primary/5 to-transparent border-t border-white/5 z-10 text-center text-muted-foreground text-2xl font-light italic opacity-80 tracking-wide uppercase">
+                  Veuillez rejoindre le cabinet de consultation
                 </div>
               </div>
-            );
-          })
+            </div>
+
+            {/* Right Column: Queue Overview */}
+            <div className="lg:col-span-5 flex flex-col gap-10 min-h-0">
+
+              <div className="bg-primary rounded-[3.5rem] p-10 shadow-2xl shadow-primary/30 flex items-center justify-between relative overflow-hidden group">
+                <div className="absolute right-0 top-0 w-48 h-48 bg-white/10 rounded-full -mr-24 -mt-24 transition-transform group-hover:scale-110" />
+                <div className="relative z-10">
+                  <p className="text-primary-foreground/70 text-sm font-black uppercase tracking-[0.2em] mb-2">Patients en attente</p>
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-8xl font-black text-white tabular-nums">{doctorQueues[0].waitingCount}</span>
+                    <span className="text-xl font-bold text-white/80 uppercase tracking-widest">Personnes</span>
+                  </div>
+                </div>
+                <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center relative z-10">
+                  <span className="text-5xl">👥</span>
+                </div>
+              </div>
+
+              <div className="flex-1 bg-card/30 backdrop-blur-2rem rounded-[3.5rem] border border-white/5 p-10 flex flex-col overflow-hidden">
+                <h3 className="text-2xl font-black text-foreground tracking-tight mb-8">Liste de passage</h3>
+                <div className="flex-1 flex flex-col items-center justify-center text-center opacity-30 grayscale gap-4">
+                  <div className="w-24 h-24 bg-secondary rounded-full flex items-center justify-center">
+                    <span className="text-4xl">✨</span>
+                  </div>
+                  <p className="text-xl font-bold">Cabinet Actif</p>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
+      </div>
+
+      {/* Footer Ticker */}
+      <div className="mt-10 shrink-0">
+        <div className="bg-card/20 backdrop-blur-md rounded-full border border-white/10 p-2 flex items-center overflow-hidden h-16">
+          <div className="flex-1 overflow-hidden relative">
+            <div className="whitespace-nowrap inline-block animate-[marquee_40s_linear_infinite] px-10">
+              <span className="text-lg font-bold text-muted-foreground mx-10">Cabinet Médical du Docteur {doctorQueues[0]?.doctor.name} &bull; Bienvenue &bull; Le respect des horaires d'appel est essentiel &bull; Merci &bull; </span>
+              <span className="text-lg font-bold text-muted-foreground mx-10">Cabinet Médical du Docteur {doctorQueues[0]?.doctor.name} &bull; Bienvenue &bull; Le respect des horaires d'appel est essentiel &bull; Merci &bull; </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -20,9 +20,6 @@ interface QueueData {
 
 const Client = () => {
   const [phone, setPhone] = useState('');
-  const [manualState, setManualState] = useState('N');
-  const [manualDoctor, setManualDoctor] = useState('');
-  const [manualNumber, setManualNumber] = useState('');
   const [queueData, setQueueData] = useState<QueueData | null>(null);
   const [loading, setLoading] = useState(false);
   const [doctors, setDoctors] = useState<{ id: string; name: string; initial: string }[]>([]);
@@ -36,21 +33,11 @@ const Client = () => {
   const lookupByPhone = async () => {
     if (!phone.trim()) return;
     setLoading(true);
-    await findClient('phone', phone.trim());
+    await findClient(phone.trim());
     setLoading(false);
   };
 
-  const lookupById = async () => {
-    if (!manualDoctor || !manualNumber) return;
-    const doctor = doctors.find(d => d.initial === manualDoctor);
-    if (!doctor) return;
-    const clientId = `${manualState}${manualNumber}${manualDoctor}`;
-    setLoading(true);
-    await findClient('id', clientId);
-    setLoading(false);
-  };
-
-  const findClient = async (mode: 'phone' | 'id', value: string) => {
+  const findClient = async (phoneValue: string) => {
     const { data: session } = await supabase
       .from('sessions')
       .select('id')
@@ -62,10 +49,6 @@ const Client = () => {
       return;
     }
 
-    // Optimization: Let the database handle the complex priority sorting
-    // Priority: U (0), N (1), R (2). We can use a CASE statement in order if supported, 
-    // but the safest and fastest way is multiple orders or a calculated field.
-    // For now, we'll fetch only what's needed for the current session.
     const { data: allEntries } = await supabase
       .from('queue_entries')
       .select('*, doctor:doctors(*)')
@@ -85,12 +68,7 @@ const Client = () => {
       return a.state_number - b.state_number;
     });
 
-    let entry;
-    if (mode === 'phone') {
-      entry = sorted.find(e => e.phone === value);
-    } else {
-      entry = sorted.find(e => e.client_id === value);
-    }
+    const entry = sorted.find(e => e.phone === phoneValue);
 
     if (!entry) {
       setQueueData({ client_id: '', state: '', position: 0, peopleBefore: 0, doctor_name: '', found: false });
@@ -117,7 +95,7 @@ const Client = () => {
 
   // Real-time updates - optimized subscription
   useEffect(() => {
-    if (!queueData?.found) return;
+    if (!queueData?.found || !phone.trim()) return;
 
     const channel = supabase
       .channel('client-position-updates')
@@ -128,20 +106,14 @@ const Client = () => {
           schema: 'public',
           table: 'queue_entries'
         },
-        (payload) => {
-          // Only trigger if a relevant record changed or something was deleted/inserted
-          // which could affect the position.
-          if (phone.trim()) findClient('phone', phone.trim());
-          else if (manualDoctor && manualNumber) {
-            const clientId = `${manualState}${manualNumber}${manualDoctor}`;
-            findClient('id', clientId);
-          }
+        () => {
+          findClient(phone.trim());
         }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [queueData?.found, phone, manualState, manualDoctor, manualNumber]);
+  }, [queueData?.found, phone]);
 
   const stateLabels: Record<string, string> = { U: 'Urgence', N: 'Nouveau', R: 'Rendez-vous' };
 
@@ -158,53 +130,17 @@ const Client = () => {
             <CardHeader className="pb-2 sm:pb-4">
               <CardTitle className="text-base sm:text-lg text-center">Trouver votre position</CardTitle>
             </CardHeader>
-            <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
-              <Tabs defaultValue="phone" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="phone" className="text-xs sm:text-sm">Par téléphone</TabsTrigger>
-                  <TabsTrigger value="id" className="text-xs sm:text-sm">Par identifiant</TabsTrigger>
-                </TabsList>
-                <TabsContent value="phone" className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
-                  <Input
-                    placeholder="Votre numéro de téléphone"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    type="tel"
-                    className="h-11 sm:h-12"
-                  />
-                  <Button onClick={lookupByPhone} className="w-full h-11 sm:h-12" disabled={loading}>
-                    <Search className="h-4 w-4 mr-2" /> Rechercher
-                  </Button>
-                </TabsContent>
-                <TabsContent value="id" className="space-y-3 sm:space-y-4 mt-3 sm:mt-4">
-                  <Select value={manualState} onValueChange={setManualState}>
-                    <SelectTrigger className="h-11 sm:h-12"><SelectValue placeholder="État" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="U">U - Urgence</SelectItem>
-                      <SelectItem value="N">N - Nouveau</SelectItem>
-                      <SelectItem value="R">R - Rendez-vous</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={manualDoctor} onValueChange={setManualDoctor}>
-                    <SelectTrigger className="h-11 sm:h-12"><SelectValue placeholder="Initiale médecin" /></SelectTrigger>
-                    <SelectContent>
-                      {doctors.map(d => (
-                        <SelectItem key={d.initial} value={d.initial}>{d.initial} - Dr. {d.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    placeholder="Numéro"
-                    value={manualNumber}
-                    onChange={(e) => setManualNumber(e.target.value)}
-                    type="number"
-                    className="h-11 sm:h-12"
-                  />
-                  <Button onClick={lookupById} className="w-full h-11 sm:h-12" disabled={loading}>
-                    <Search className="h-4 w-4 mr-2" /> Rechercher
-                  </Button>
-                </TabsContent>
-              </Tabs>
+            <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-3 sm:space-y-4">
+              <Input
+                placeholder="Votre numéro de téléphone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                type="tel"
+                className="h-11 sm:h-12"
+              />
+              <Button onClick={lookupByPhone} className="w-full h-11 sm:h-12" disabled={loading}>
+                <Search className="h-4 w-4 mr-2" /> Rechercher
+              </Button>
             </CardContent>
           </Card>
         </div>

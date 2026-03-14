@@ -33,19 +33,6 @@ const Accueil = () => {
   const [editPhone, setEditPhone] = useState('');
   const [editPatientName, setEditPatientName] = useState('');
   const [editState, setEditState] = useState<'U' | 'N' | 'R'>('N');
-  const [editDoctorId, setEditDoctorId] = useState('');
-  const [doctorFilter, setDoctorFilter] = useState<string>('all');
-  const doctorsScrollRef = useRef<HTMLDivElement>(null);
-
-  const scrollDoctors = (direction: 'left' | 'right') => {
-    if (doctorsScrollRef.current) {
-      const scrollAmount = 150;
-      doctorsScrollRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
 
   // Add client form
   const [newPhone, setNewPhone] = useState('');
@@ -68,22 +55,10 @@ const Accueil = () => {
   const [hasNextAppt, setHasNextAppt] = useState(false);
   const [nextApptDate, setNextApptDate] = useState<Date | undefined>(undefined);
   const [nextApptTime, setNextApptTime] = useState('09:00');
-  const [nextApptDoctorId, setNextApptDoctorId] = useState('');
 
 
   // Memoize statistics to avoid recalculating on every render
   const stats = useMemo(() => getStats(), [entries, inCabinetEntries, getStats]);
-
-  // Memoize statistics by doctor
-  const doctorStats = useMemo(() => {
-    return doctors.map(doctor => {
-      const doctorEntries = entries.filter(e => e.doctor_id === doctor.id);
-      return {
-        ...doctor,
-        waitingCount: doctorEntries.length
-      };
-    });
-  }, [doctors, entries]);
 
 
   const handleOpenSession = async () => {
@@ -110,11 +85,13 @@ const Accueil = () => {
   };
 
   const handleAddClient = async () => {
-    if (!newPhone.trim() || !newDoctorId) {
+    if (!newPhone.trim()) {
       toast.error('Veuillez remplir tous les champs');
       return;
     }
-    const { error } = await addClient(newPhone, newState, newDoctorId, newPatientName, linkedAppointmentId || undefined);
+    // Solo doctor: auto-select the first doctor ID
+    const soloDoctorId = doctors[0]?.id;
+    const { error } = await addClient(newPhone, newState, soloDoctorId, newPatientName, linkedAppointmentId || undefined);
     if (error) {
       if ((error as any).code === '23505') {
         toast.error('Ce numéro de téléphone est déjà dans la file d\'attente');
@@ -128,7 +105,6 @@ const Accueil = () => {
       setNewPhone('');
       setNewPatientName('');
       setNewState('N');
-      setNewDoctorId('');
       setLinkedAppointmentId(null);
     }
   };
@@ -153,7 +129,6 @@ const Accueil = () => {
             setFoundAppointments(data);
             if (data.length === 1) {
               setNewPatientName(data[0].client_name);
-              setNewDoctorId(data[0].doctor_id);
               setLinkedAppointmentId(data[0].id);
               toast.info(`Rendez-vous trouvé pour ${data[0].client_name}`);
             } else {
@@ -224,7 +199,6 @@ const Accueil = () => {
     setHasNextAppt(false);
     setNextApptDate(undefined);
     setNextApptTime('09:00');
-    setNextApptDoctorId(entry.doctor_id);
     setShowCompleteModal(true);
 
   };
@@ -249,12 +223,15 @@ const Accueil = () => {
         const appointmentAt = new Date(nextApptDate);
         appointmentAt.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
+        // Solo doctor: auto-select the first doctor ID
+        const soloDoctorId = doctors[0]?.id;
+
         await (await import('@/integrations/supabase/client')).supabase
           .from('appointments')
           .insert({
             client_phone: selectedEntry.phone,
             client_name: clientName.trim(),
-            doctor_id: nextApptDoctorId,
+            doctor_id: soloDoctorId,
             appointment_at: appointmentAt.toISOString(),
             status: 'scheduled'
           });
@@ -273,12 +250,11 @@ const Accueil = () => {
     setEditPhone(entry.phone);
     setEditPatientName(entry.patient_name || '');
     setEditState(entry.state);
-    setEditDoctorId(entry.doctor_id);
     setShowEditModal(true);
   };
 
   const handleUpdate = async () => {
-    if (!editEntry || !editPhone.trim() || !editDoctorId) {
+    if (!editEntry || !editPhone.trim()) {
       toast.error('Veuillez remplir tous les champs');
       return;
     }
@@ -286,7 +262,6 @@ const Accueil = () => {
       phone: editPhone.trim(),
       patient_name: editPatientName.trim(),
       state: editState,
-      doctor_id: editDoctorId,
     });
     if (error) toast.error('Erreur lors de la modification');
     else {
@@ -312,12 +287,7 @@ const Accueil = () => {
     setShowCompleted(true);
   };
 
-  const filtered = useMemo(() => {
-    return entries.filter(e => {
-      const matchesDoctor = doctorFilter === 'all' || e.doctor_id === doctorFilter;
-      return matchesDoctor;
-    });
-  }, [entries, doctorFilter]);
+  const filtered = entries;
 
   const stateColors = {
     U: 'bg-destructive text-destructive-foreground',
@@ -430,51 +400,6 @@ const Accueil = () => {
         </div>
       </header>
 
-      {/* Stats by Doctor - carousel with navigation */}
-      <div className="relative">
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 z-10 hidden sm:flex">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 bg-background/80 shadow-md rounded-full"
-            onClick={() => scrollDoctors('left')}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10 hidden sm:flex">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 bg-background/80 shadow-md rounded-full"
-            onClick={() => scrollDoctors('right')}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-        <div
-          ref={doctorsScrollRef}
-          className="flex gap-2 p-3 sm:p-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
-          {doctorStats.map(ds => {
-            return (
-              <Card
-                key={ds.id}
-                className="border-0 shadow-sm shrink-0 w-28 sm:w-40 snap-start cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => setDoctorFilter(doctorFilter === ds.id ? 'all' : ds.id)}
-              >
-                <CardContent className="p-3 sm:p-4 text-center">
-                  <p className="text-xs font-medium text-muted-foreground mb-1 truncate">Dr. {ds.name}</p>
-                  <p className="text-xl sm:text-2xl font-bold text-foreground">{ds.waitingCount}</p>
-                  <p className="text-xs text-muted-foreground">en attente</p>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
-
       {/* In Cabinet Section */}
       {inCabinetEntries.length > 0 && (
         <div className="p-3 sm:p-4 pb-0">
@@ -492,7 +417,6 @@ const Accueil = () => {
                 <CardContent className="p-3 text-center">
                   <p className="font-bold text-lg text-orange-700">{entry.client_id}</p>
                   <p className="text-xs font-medium text-orange-800 truncate">{entry.patient_name || '—'}</p>
-                  <p className="text-xs text-orange-600 truncate">Dr. {entry.doctor?.name || '—'}</p>
                   <p className="text-xs text-orange-500 mt-1">Cliquer pour finaliser</p>
                 </CardContent>
               </Card>
@@ -528,9 +452,6 @@ const Accueil = () => {
                         {stateLabels[entry.state]}
                       </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      Dr. {entry.doctor?.name || '—'}
-                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -667,14 +588,6 @@ const Accueil = () => {
                 </div>
               </div>
             )}
-            <Select value={newDoctorId} onValueChange={setNewDoctorId}>
-              <SelectTrigger className="h-11 sm:h-12"><SelectValue placeholder="Médecin" /></SelectTrigger>
-              <SelectContent>
-                {doctors.map(d => (
-                  <SelectItem key={d.id} value={d.id}>Dr. {d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           <DialogFooter>
             <Button onClick={handleAddClient} className="w-full h-11 sm:h-12">Ajouter</Button>
@@ -760,17 +673,6 @@ const Accueil = () => {
                     <Input type="time" value={nextApptTime} onChange={(e) => setNextApptTime(e.target.value)} className="h-10" />
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Médecin</label>
-                  <Select value={nextApptDoctorId} onValueChange={setNextApptDoctorId}>
-                    <SelectTrigger className="h-10"><SelectValue placeholder="Médecin" /></SelectTrigger>
-                    <SelectContent>
-                      {doctors.map(d => (
-                        <SelectItem key={d.id} value={d.id}>Dr. {d.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
             )}
 
@@ -839,14 +741,6 @@ const Accueil = () => {
                 <SelectItem value="U">🔴 Urgence</SelectItem>
                 <SelectItem value="N">🟢 Nouveau</SelectItem>
                 <SelectItem value="R">🔵 Rendez-vous</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={editDoctorId} onValueChange={setEditDoctorId}>
-              <SelectTrigger className="h-11 sm:h-12"><SelectValue placeholder="Médecin" /></SelectTrigger>
-              <SelectContent>
-                {doctors.map(d => (
-                  <SelectItem key={d.id} value={d.id}>Dr. {d.name}</SelectItem>
-                ))}
               </SelectContent>
             </Select>
           </div>
