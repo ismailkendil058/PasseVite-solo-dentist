@@ -254,6 +254,33 @@ export type Database = {
         }
         Relationships: []
       }
+      review_submissions: {
+        Row: {
+          id: string
+          satisfied: boolean
+          patient_name: string | null
+          phone: string | null
+          feedback: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          satisfied: boolean
+          patient_name?: string | null
+          phone?: string | null
+          feedback?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          satisfied?: boolean
+          patient_name?: string | null
+          phone?: string | null
+          feedback?: string | null
+          created_at?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string

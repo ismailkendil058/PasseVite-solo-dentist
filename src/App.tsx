@@ -15,6 +15,10 @@ const Client = lazy(() => import("./pages/Client"));
 const Manager = lazy(() => import("./pages/Manager"));
 const TV = lazy(() => import("./pages/TV"));
 const Rendezvous = lazy(() => import("./pages/Rendezvous"));
+const PatientSatisfaction = lazy(() => import("./pages/review/PatientSatisfaction"));
+const GoogleReview = lazy(() => import("./pages/review/GoogleReview"));
+const PrivateFeedback = lazy(() => import("./pages/review/PrivateFeedback"));
+const ThankYou = lazy(() => import("./pages/review/ThankYou"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const LoadingScreen = () => (
@@ -70,6 +74,13 @@ const App = () => (
             <Route path="/rendezvous" element={
               <ProtectedRoute requiredRoles={['manager', 'receptionist']}><Rendezvous /></ProtectedRoute>
             } />
+
+            {/* Review Funnel Routes */}
+            <Route path="/review" element={<PatientSatisfaction />} />
+            <Route path="/avis-google" element={<GoogleReview />} />
+            <Route path="/feedback" element={<PrivateFeedback />} />
+            <Route path="/merci" element={<ThankYou />} />
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

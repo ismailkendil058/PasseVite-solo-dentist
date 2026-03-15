@@ -239,6 +239,11 @@ const Accueil = () => {
         toast.success('Rendez-vous programmé');
       }
 
+      // After successful completion, open SMS app for feedback
+      const smsMessage = `Bonjour de la part du cabinet PasseVite. Nous espérons que votre soin s'est bien passé. Votre avis nous est précieux ! Merci de nous faire part de votre expérience ici : https://passevite-uno.vercel.app/review`;
+      const smsLink = `sms:${selectedEntry.phone}?body=${encodeURIComponent(smsMessage)}`;
+      window.location.href = smsLink;
+
       toast.success('Patient traité avec succès');
       setShowCompleteModal(false);
     }
